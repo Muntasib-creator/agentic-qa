@@ -1,5 +1,7 @@
 # Python-generated files
 __pycache__/
+node_modules/*
+sessions.json
 *.py[oc]
 build/
 dist/
