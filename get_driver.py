@@ -3,6 +3,7 @@ import urllib.parse
 import urllib.request
 
 SERVER_HOST = "192.168.1.101"
+# SERVER_HOST = "localhost"
 
 
 def get_url(headless: bool = False, session: None | str = None) -> str:
