@@ -64,11 +64,13 @@ def browser_worker(port: int, headless: bool, browser_holder: dict) -> None:
             headless=headless,
             args=[
                 f"--remote-debugging-port={port}",
-                "--no-first-run",
-                "--no-default-browser-check",
-                "--disable-popup-blocking",
-                "--disable-dev-shm-usage",
-                "--disable-background-networking",
+                "--remote-debugging-address=0.0.0.0",
+                "--no-sandbox",
+                # "--no-first-run",
+                # "--no-default-browser-check",
+                # "--disable-popup-blocking",
+                # "--disable-dev-shm-usage",
+                # "--disable-background-networking",
             ],
         )
         browser_holder["browser"] = browser

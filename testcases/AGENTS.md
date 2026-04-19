@@ -5,7 +5,7 @@ When creating or editing test cases, assume there is already a browser session a
 
 Use this workflow:
 
-1. Connect to the browser on `9222`.
+1. Connect to the browser on `http://192.168.1.101:9222`.
 2. Open the target URL or continue from the current live page.
 3. Execute only the next small action you want to validate.
 4. Read the DOM with `page.content()`.
@@ -27,7 +27,7 @@ Use snippets like this while exploring or validating one action at a time:
 from playwright.sync_api import sync_playwright
 
 with sync_playwright() as p:
-    browser = p.chromium.connect_over_cdp("http://localhost:9222")
+    browser = p.chromium.connect_over_cdp("http://192.168.1.101:9222")
     context = browser.contexts[0] if browser.contexts else browser.new_context()
     page = context.pages[0] if context.pages else context.new_page()
     page.goto("https://example.com")
@@ -72,7 +72,7 @@ Do not hard-code one locator strategy order into the agent workflow. Pick the mo
 - Partial live-browser validation:
   `uv run python - <<'PY'`
 - Connect with:
-  `p.chromium.connect_over_cdp("http://localhost:9222")`
+  `p.chromium.connect_over_cdp("http://192.168.1.101:9222")`
 - Collect DOM with:
   `html = page.content()`
 - Final full testcase run:
