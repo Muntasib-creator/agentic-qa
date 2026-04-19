@@ -1,56 +1,54 @@
 import json
-import os
 import socket
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 
 
 SESSIONS_FILE = Path("sessions.json")
-BASE_PORT = 9222
-MAX_PORT = 9232
+FIXED_PORT = 9222
+MAX_AGE_MINUTES = 10
 
 
-def find_available_port(start: int, end: int) -> int | None:
-    for port in range(start, end + 1):
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-            try:
-                sock.bind(("127.0.0.1", port))
-                return port
-            except OSError:
-                continue
+BROWSER_THREAD = None
+BROWSER_HOLDER = {}
+
+
+def load_session() -> dict | None:
+    if SESSIONS_FILE.exists():
+        data = json.loads(SESSIONS_FILE.read_text())
+        return data.get("session_9222")
     return None
 
 
-def load_sessions() -> dict:
-    if SESSIONS_FILE.exists():
-        return json.loads(SESSIONS_FILE.read_text())
-    return {}
-
-
-def save_sessions(sessions: dict) -> None:
-    SESSIONS_FILE.write_text(json.dumps(sessions, indent=2))
-
-
-BROWSER_THREADS = {}
+def save_session(data: dict) -> None:
+    SESSIONS_FILE.write_text(json.dumps({"session_9222": data}, indent=2))
 
 
 def is_thread_alive(tid: int | None) -> bool:
-    if not tid or tid not in BROWSER_THREADS:
+    global BROWSER_THREAD
+    if not tid or not BROWSER_THREAD:
         return False
-    thread = BROWSER_THREADS[tid]
-    return thread.is_alive()
+    return BROWSER_THREAD.is_alive()
 
 
-def wait_for_port(host: str, port: int, timeout: float = 10.0) -> bool:
+def is_session_expired(launched_at: str) -> bool:
+    try:
+        dt = datetime.fromisoformat(launched_at)
+        return datetime.now() - dt > timedelta(minutes=MAX_AGE_MINUTES)
+    except Exception:
+        return True
+
+
+def wait_for_port(port: int, timeout: float = 10.0) -> bool:
     deadline = time.time() + timeout
     while time.time() < deadline:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
             sock.settimeout(0.2)
             try:
-                sock.connect((host, port))
+                sock.connect(("127.0.0.1", port))
                 return True
             except OSError:
                 time.sleep(0.1)
@@ -81,19 +79,19 @@ def browser_worker(port: int, headless: bool, browser_holder: dict) -> None:
 
 
 def launch_browser(port: int, headless: bool) -> int | None:
-    browser_holder = {}
-    thread = threading.Thread(
+    global BROWSER_THREAD, BROWSER_HOLDER
+    BROWSER_HOLDER = {}
+    BROWSER_THREAD = threading.Thread(
         target=browser_worker,
-        args=(port, headless, browser_holder),
+        args=(port, headless, BROWSER_HOLDER),
         daemon=True,
     )
-    thread.start()
-    if not wait_for_port("127.0.0.1", port):
+    BROWSER_THREAD.start()
+    if not wait_for_port(port):
         return None
-    while "browser" not in browser_holder:
+    while "browser" not in BROWSER_HOLDER:
         time.sleep(0.1)
-    BROWSER_THREADS[thread.ident] = thread
-    return thread.ident
+    return BROWSER_THREAD.ident
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -108,59 +106,52 @@ class Handler(BaseHTTPRequestHandler):
 
         query = parse_qs(urlparse(self.path).query)
         headless = query.get("headless", ["false"])[0].lower() == "true"
-        session = query.get("session", [None])[0]
 
-        if session:
-            sessions = load_sessions()
-            data = sessions.get(session)
-            if data and is_thread_alive(data.get("tid")):
-                ws_url = f"http://localhost:{data['port']}"
-                print(f"[server] Reusing existing session {session} on port {data['port']}")
+        existing = load_session()
+        tid = existing.get("tid") if existing else None
+        launched_at = existing.get("launched_at") if existing else None
+
+        if tid and is_thread_alive(tid):
+            if launched_at and is_session_expired(launched_at):
+                print(f"[server] Session expired, relaunching browser on port {FIXED_PORT}")
+            else:
+                ws_url = f"http://localhost:{FIXED_PORT}"
+                print(f"[server] Reusing existing session on port {FIXED_PORT}")
                 response = json.dumps({
                     "url": ws_url,
-                    "session": session,
-                    "port": data["port"],
-                    "headless": data["headless"],
-                    "launched_at": data["launched_at"],
+                    "session": "session_9222",
+                    "port": FIXED_PORT,
+                    "headless": existing["headless"],
+                    "launched_at": launched_at,
                 }).encode()
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.end_headers()
                 self.wfile.write(response)
                 return
-            if data:
-                del sessions[session]
-                save_sessions(sessions)
 
-        port = find_available_port(BASE_PORT, MAX_PORT)
-        if not port:
-            self.send_error(500, "No available port")
-            return
-
-        tid = launch_browser(port, headless)
+        tid = launch_browser(FIXED_PORT, headless)
         if not tid:
             self.send_error(500, "Failed to launch browser")
             return
 
-        ws_url = f"http://localhost:{port}"
-        session_id = f"session_{port}"
-        sessions = load_sessions()
-        sessions[session_id] = {
-            "port": port,
+        now = datetime.now().isoformat()
+        ws_url = f"http://localhost:{FIXED_PORT}"
+        save_session({
+            "port": FIXED_PORT,
             "headless": headless,
             "tid": tid,
-            "launched_at": datetime.now().isoformat(),
-        }
-        save_sessions(sessions)
+            "launched_at": now,
+        })
 
-        print(f"[server] Launched browser session {session_id} on port {port} (headless={headless})")
+        print(f"[server] Launched browser session on port {FIXED_PORT} (headless={headless})")
 
         response = json.dumps({
             "url": ws_url,
-            "session": session_id,
-            "port": port,
+            "session": "session_9222",
+            "port": FIXED_PORT,
             "headless": headless,
-            "launched_at": sessions[session_id]["launched_at"],
+            "launched_at": now,
         }).encode()
 
         self.send_response(200)
