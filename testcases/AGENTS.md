@@ -3,42 +3,57 @@
 ## Purpose
 This repository exists solely to create and maintain Playwright Python test cases for an external application under test (AUT). Test cases reside in this `testcases/` directory. The AUT source code is located in another repository.
 
-## Workflow for CLI Agents
-When creating or editing test cases:
+## Required Authoring Workflow
+When creating or editing test cases, use the persistent session runner so one browser session is reused across incremental steps:
 
-### 1. Inspect the LIVE Application
-- Ensure the AUT is running (environment already prepared)
-- Use browser dev tools to examine current DOM state
-- Derive stable locators from: ARIA roles, accessible labels, placeholder text, visible text
+1. Inspect the LIVE application.
+2. Decide the ordered step list before writing much code.
+3. Start a persistent session:
+   `uv run python -m testcases.session_runner start --test testcases/test_<name>.py --session-name <name> --headed`
+4. Implement only the next step.
+5. Run that step in the live session:
+   `uv run python -m testcases.session_runner run-step --session-name <name> --step <n>`
+6. If the step fails, inspect the saved screenshot / HTML / trace, fix the code, and rerun the same step or reset the session if state is no longer trustworthy.
+7. Only after the step passes should you add the next step.
+8. After all steps pass individually, run remaining steps in the same live session:
+   `uv run python -m testcases.session_runner run-full --session-name <name>`
+9. Finish with clean end-to-end validation from a fresh context:
+   `uv run python -m testcases.session_runner validate-full --session-name <name> --repeat 3`
+10. Stop the persistent session when done:
+   `uv run python -m testcases.session_runner stop --session-name <name>`
 
-### 2. Implement Test Cases
-- Create files in `testcases/` with descriptive names (e.g., `test_user_login.py`)
-- Use Playwright's synchronous API with this structure:
-  ```python
-  from playwright.sync_api import Page, expect
+## Test Case Structure
+Each generated testcase must expose:
 
-  def test_<name>(page: Page):
-      page.goto("<TARGET_URL>")
-      # Use stable locators prioritized below
-      page.get_by_role("button", name="Submit").click()
-      expect(page.locator("[data-testid='success-message']")).to_be_visible()
+- `build_steps() -> list[Step]`
+- Ordered, human-readable step names
+- One focused UI action per step
+- One immediate validation per step
+- A direct full-validation entrypoint for clean runs
 
-  # Enables direct execution: uv run testcases/test_<name>.py
-  if __name__ == "__main__":
-      from playwright.sync_api import sync_playwright
-      with sync_playwright() as p:
-          browser = p.chromium.launch(headless=False)
-          page = browser.new_page()
-          test_<name>(page)
-          browser.close()
-  ```
+Use Playwright's synchronous API and the shared `Step` type from `testcases.runtime`.
 
-### 3. Validate & Refine
-- Run test directly: `uv run testcases/test_<name>.py`
-- If failing, re-inspect LIVE DOM (never reuse stale selectors)
-- Adjust locators/actions until test passes consistently
-
+## Step Rules
+- Reuse the same persistent browser session while authoring steps.
+- Do not write the full test first and debug at the end.
+- Do not skip per-step validation.
+- Prefer checks that prove the UI actually changed:
+  - visible text
+  - URL changes
+  - form values
+  - enabled/disabled state
+  - DOM visibility
+- If a live session becomes unreliable after a failure, run:
+  `uv run python -m testcases.session_runner reset --session-name <name>`
 
 ## Execution Method
-- Run individual test: `uv run testcases/test_filename.py`
-- View headed browser: Set `headless=False` in launch() or use `--headed` flag
+- Start persistent authoring session:
+  `uv run python -m testcases.session_runner start --test testcases/test_<name>.py --session-name <name> --headed`
+- Run one step in the existing session:
+  `uv run python -m testcases.session_runner run-step --session-name <name> --step 2`
+- Continue all remaining steps in the same session:
+  `uv run python -m testcases.session_runner run-full --session-name <name>`
+- Fresh validation from clean contexts:
+  `uv run python -m testcases.session_runner validate-full --session-name <name> --repeat 3`
+- Direct full run from scratch for a single testcase:
+  `uv run python testcases/test_<name>.py --repeat 3`
