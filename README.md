@@ -27,3 +27,5 @@ Each final testcase should launch its own Playwright browser and support a direc
 ```bash
 uv run python testcases/test_login_success.py
 ```
+
+If that full run fails, inspect the traceback, reproduce the failing step against the live browser on `http://localhost:9222`, inspect `page.content()` and page state there, fix the testcase, and rerun the full file.
