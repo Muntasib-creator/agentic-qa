@@ -27,7 +27,10 @@ No automated tests exist yet. When adding test cases for the target application:
 
 - Use Playwright Python.
 - Put generated cases under `testcases/`.
-- Run them with the target project’s Playwright runner or the command sequence you add for that case.
+- Author them incrementally by connecting Playwright to the already-running browser on `http://localhost:9222` for validation only.
+- Validate partial code against the live page and inspect `page.content()` before finalizing locators.
+- The final testcase itself should launch and close its own Playwright browser.
+- Finish with a full testcase run after the incremental checks succeed.
 
 ## Commit & Pull Request Guidelines
 This branch has no commit history yet, so there is no established commit convention. Use short, imperative commit subjects, for example: `Add CLI entry point`.

@@ -3,22 +3,27 @@
 This repository is a small Playwright Python workspace for authoring browser automation testcases against an external application under test.
 
 ## Incremental authoring workflow
-Use the persistent session runner to keep one browser session alive while building a testcase step by step:
+Use the already-running browser on `http://localhost:9222` only as a validation scratchpad while building a testcase. Validate partial snippets there, inspect the DOM with `page.content()`, and only then write the final testcase.
 
 ```bash
-uv run python -m testcases.session_runner start --test testcases/test_login_success.py --session-name login --headed
-uv run python -m testcases.session_runner run-step --session-name login --step 1
-uv run python -m testcases.session_runner run-step --session-name login --step 2
-uv run python -m testcases.session_runner run-full --session-name login
-uv run python -m testcases.session_runner validate-full --session-name login --repeat 3
-uv run python -m testcases.session_runner stop --session-name login
+uv run python - <<'PY'
+from playwright.sync_api import sync_playwright
+
+with sync_playwright() as p:
+    browser = p.chromium.connect_over_cdp("http://localhost:9222")
+    context = browser.contexts[0] if browser.contexts else browser.new_context()
+    page = context.pages[0] if context.pages else context.new_page()
+    page.goto("https://example.com")
+    html = page.content()
+    print(html)
+PY
 ```
 
-Artifacts are written under `testcases/.artifacts/`.
+Build locators from the live DOM returned by the page.
 
 ## Direct full validation
-Each testcase should also support a direct clean run from scratch:
+Each final testcase should launch its own Playwright browser and support a direct run from scratch:
 
 ```bash
-uv run python testcases/test_login_success.py --repeat 3
+uv run python testcases/test_login_success.py
 ```
