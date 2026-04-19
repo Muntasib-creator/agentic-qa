@@ -8,6 +8,7 @@ from pathlib import Path
 
 
 SESSIONS_FILE = Path("sessions.json")
+HOST = '192.168.1.101'
 FIXED_PORT = 9222
 MAX_AGE_MINUTES = 10
 
@@ -115,7 +116,7 @@ class Handler(BaseHTTPRequestHandler):
             if launched_at and is_session_expired(launched_at):
                 print(f"[server] Session expired, relaunching browser on port {FIXED_PORT}")
             else:
-                ws_url = f"http://localhost:{FIXED_PORT}"
+                ws_url = f"http://{HOST}:{FIXED_PORT}"
                 print(f"[server] Reusing existing session on port {FIXED_PORT}")
                 response = json.dumps({
                     "url": ws_url,
@@ -136,7 +137,7 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         now = datetime.now().isoformat()
-        ws_url = f"http://localhost:{FIXED_PORT}"
+        ws_url = f"http://{HOST}:{FIXED_PORT}"
         save_session({
             "port": FIXED_PORT,
             "headless": headless,
